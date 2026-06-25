@@ -8,7 +8,9 @@
       carton barcode CB_COLIS (priced PV1 x NBR_CB) - so no scan says "not found".
     * the CURRENTLY-ACTIVE promotions (PROMO=1 AND today within D1..D2 AND a real
       discount), including the POS quantity threshold QTE_PROMO (minQty), under
-      the primary AND synonym barcodes.
+      the PRIMARY barcode only — one promo card per product (no duplicates).
+      Scanning a synonym barcode still finds the product via the catalogue above
+      (at its normal price; the promo applies when the primary barcode is used).
   The server replaces the prior synced promotions each run. Read-only on HYPER PRO.
 
   Deploy on a store PC (PowerShell):
@@ -73,12 +75,7 @@ OUTPUT;
 OUTPUT '$promoTxt';
 SELECT p.CODE_BARRE || $U || COALESCE(p.PRODUIT,'') || $U || $($pv -f 'p') || $U ||
   CAST(CAST(p.PP1_TTC AS NUMERIC(18,2)) AS VARCHAR(20)) || $U || CAST(COALESCE(p.QTE_PROMO,1) AS VARCHAR(10))
-  FROM PRODUIT p WHERE p.CODE_BARRE IS NOT NULL AND p.CODE_BARRE <> '' AND $($promoWhere -f 'p')
-UNION ALL
-SELECT cb.CODE_BARRE_SYN || $U || COALESCE(p.PRODUIT,'') || $U || $($pv -f 'p') || $U ||
-  CAST(CAST(p.PP1_TTC AS NUMERIC(18,2)) AS VARCHAR(20)) || $U || CAST(COALESCE(p.QTE_PROMO,1) AS VARCHAR(10))
-  FROM CODEBARRE cb JOIN PRODUIT p ON p.CODE_BARRE = cb.CODE_BARRE
-  WHERE cb.CODE_BARRE_SYN IS NOT NULL AND cb.CODE_BARRE_SYN <> '' AND $($promoWhere -f 'p');
+  FROM PRODUIT p WHERE p.CODE_BARRE IS NOT NULL AND p.CODE_BARRE <> '' AND $($promoWhere -f 'p');
 OUTPUT;
 "@ | Set-Content -Encoding ASCII $sqlFile
 
