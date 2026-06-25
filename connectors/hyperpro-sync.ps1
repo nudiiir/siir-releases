@@ -60,7 +60,8 @@ OUTPUT;
 OUTPUT '$promoTxt';
 SELECT CODE_BARRE || ASCII_CHAR(31) || COALESCE(PRODUIT,'') || ASCII_CHAR(31) ||
   CAST(CAST(PV1_TTC AS NUMERIC(18,2)) AS VARCHAR(20)) || ASCII_CHAR(31) ||
-  CAST(CAST(PP1_TTC AS NUMERIC(18,2)) AS VARCHAR(20))
+  CAST(CAST(PP1_TTC AS NUMERIC(18,2)) AS VARCHAR(20)) || ASCII_CHAR(31) ||
+  CAST(COALESCE(QTE_PROMO,1) AS VARCHAR(10))
 FROM PRODUIT
 WHERE COALESCE(PROMO,0)=1 AND COALESCE(PP1_TTC,0)>0 AND COALESCE(PV1_TTC,0)>0
   AND PP1_TTC < PV1_TTC
@@ -87,9 +88,9 @@ OUTPUT;
   [void]$sb.Append('],"promos":[')
   $first = $true
   foreach ($line in $promoLines) {
-    $f = $line.Split($US); if ($f.Count -lt 4) { continue }
+    $f = $line.Split($US); if ($f.Count -lt 5) { continue }
     if (-not $first) { [void]$sb.Append(',') }; $first = $false
-    [void]$sb.Append('{"barcode":').Append((J $f[0].Trim())).Append(',"title":').Append((J $f[1].Trim())).Append(',"oldPrice":').Append($f[2].Trim()).Append(',"newPrice":').Append($f[3].Trim()).Append('}')
+    [void]$sb.Append('{"barcode":').Append((J $f[0].Trim())).Append(',"title":').Append((J $f[1].Trim())).Append(',"oldPrice":').Append($f[2].Trim()).Append(',"newPrice":').Append($f[3].Trim()).Append(',"minQty":').Append($f[4].Trim()).Append('}')
   }
   [void]$sb.Append(']}')
   [IO.File]::WriteAllText($payload, $sb.ToString(), (New-Object System.Text.UTF8Encoding($false)))
