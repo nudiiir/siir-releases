@@ -87,14 +87,14 @@ function Invoke-Rows($conn, $sql) {
 $PRODUCT_SQL = @'
 SELECT p.Code AS Code, p.Designation AS Designation, s.PrixV AS PrixV
 FROM dbo.Produit p
-INNER JOIN dbo.Stock s ON s.Code = p.Code
+INNER JOIN dbo.Stock s ON s.Code COLLATE DATABASE_DEFAULT = p.Code COLLATE DATABASE_DEFAULT
 WHERE s.PrixV IS NOT NULL AND s.PrixV > 0
 '@
 
 $PROMO_SQL = @'
 SELECT vf.Code AS barcode, s.PrixV AS oldPrice, vf.PrixFlash AS newPrice
 FROM dbo.VenteFlash vf
-INNER JOIN dbo.Stock s ON s.Code = vf.Code
+INNER JOIN dbo.Stock s ON s.Code COLLATE DATABASE_DEFAULT = vf.Code COLLATE DATABASE_DEFAULT
 WHERE vf.PrixFlash > 0 AND s.PrixV > vf.PrixFlash
   AND CAST(GETDATE() AS date) BETWEEN vf.DateDebut AND vf.DateFin
   AND CAST(GETDATE() AS time) BETWEEN ISNULL(vf.HeureDebut, CAST('00:00:00' AS time))
