@@ -118,22 +118,24 @@ function Sync-Once {
 
   $products = New-Object System.Collections.Generic.List[object]
   foreach ($r in $prod.Rows) {
-    $code = [Convert]::ToString($r['Code']).Trim()
+    if ($null -eq $r) { continue }
+    $code = [Convert]::ToString($r.Item('Code')).Trim()
     if (-not $code) { continue }
     $products.Add([ordered]@{
       Code        = $code
-      Designation = [Convert]::ToString($r['Designation']).Trim()
-      PrixV       = [Convert]::ToDouble($r['PrixV'])
+      Designation = [Convert]::ToString($r.Item('Designation')).Trim()
+      PrixV       = [Convert]::ToDouble($r.Item('PrixV'))
     })
   }
   $promos = New-Object System.Collections.Generic.List[object]
   foreach ($r in $promo.Rows) {
-    $bc = [Convert]::ToString($r['barcode']).Trim()
+    if ($null -eq $r) { continue }
+    $bc = [Convert]::ToString($r.Item('barcode')).Trim()
     if (-not $bc) { continue }
     $promos.Add([ordered]@{
       barcode  = $bc
-      oldPrice = [Convert]::ToDouble($r['oldPrice'])
-      newPrice = [Convert]::ToDouble($r['newPrice'])
+      oldPrice = [Convert]::ToDouble($r.Item('oldPrice'))
+      newPrice = [Convert]::ToDouble($r.Item('newPrice'))
     })
   }
 
