@@ -78,17 +78,65 @@ function New-Conn {
 }
 
 function Invoke-Rows($conn, $sql) {
-  $cmd = $conn.CreateCommand(); $cmd.CommandText = $sql; $cmd.CommandTimeout = 120
+  $cmd = $conn.CreateCommand(); $cmd.CommandText = $sql; $cmd.CommandTimeout = 600
   $dt = New-Object System.Data.DataTable
   (New-Object System.Data.SqlClient.SqlDataAdapter $cmd).Fill($dt) | Out-Null
   return $dt
 }
 
+# Price = the store's proven logic: most-recent of StockDET (price history, by
+# DateAch) and Ventes (last UNIT sale, by DateVente), with a MultiCodeBare
+# sibling-barcode fallback. COLLATE DATABASE_DEFAULT on every Code comparison
+# (this POS mixes Arabic/French column collations).
 $PRODUCT_SQL = @'
-SELECT p.Code AS Code, p.Designation AS Designation, s.PrixV AS PrixV
+SET NOCOUNT ON;
+SELECT Code, PrixV, DateAch INTO #LatestStock FROM (
+  SELECT LTRIM(RTRIM(Code)) COLLATE DATABASE_DEFAULT AS Code, PrixV, DateAch,
+         ROW_NUMBER() OVER (PARTITION BY LTRIM(RTRIM(Code)) ORDER BY DateAch DESC) AS rn
+  FROM dbo.StockDET WHERE PrixV > 0
+) x WHERE rn = 1;
+
+SELECT Code, PrixV, DateVente INTO #LatestVente FROM (
+  SELECT LTRIM(RTRIM(v2.Code)) COLLATE DATABASE_DEFAULT AS Code, v2.PrixV, v2.DateVente, v2.NumVente,
+         ROW_NUMBER() OVER (PARTITION BY LTRIM(RTRIM(v2.Code)) ORDER BY v2.DateVente DESC, v2.NumVente DESC) AS rn
+  FROM dbo.Ventes v2
+  WHERE v2.PrixV > 0 AND v2.Qte = 1
+    AND NOT (
+      LTRIM(RTRIM(v2.Code)) COLLATE DATABASE_DEFAULT IN (SELECT LTRIM(RTRIM(CodeSTK)) COLLATE DATABASE_DEFAULT FROM dbo.DeuxCodeEmbalage)
+      AND v2.PrixV <> ISNULL((SELECT TOP 1 s.PrixV FROM dbo.StockDET s WHERE LTRIM(RTRIM(s.Code)) COLLATE DATABASE_DEFAULT = LTRIM(RTRIM(v2.Code)) COLLATE DATABASE_DEFAULT ORDER BY s.DateAch DESC), v2.PrixV)
+    )
+) v WHERE rn = 1;
+
+SELECT
+  LTRIM(RTRIM(p.Code)) AS Code,
+  LTRIM(RTRIM(p.Designation)) AS Designation,
+  CAST(CASE
+    WHEN sd.DateAch IS NOT NULL AND vt.DateVente IS NOT NULL THEN CASE WHEN vt.DateVente >= sd.DateAch THEN vt.PrixV ELSE sd.PrixV END
+    WHEN sd.DateAch IS NOT NULL THEN sd.PrixV
+    WHEN vt.DateVente IS NOT NULL THEN vt.PrixV
+    ELSE sib.PrixV
+  END AS real) AS PrixV
 FROM dbo.Produit p
-INNER JOIN dbo.Stock s ON s.Code COLLATE DATABASE_DEFAULT = p.Code COLLATE DATABASE_DEFAULT
-WHERE s.PrixV IS NOT NULL AND s.PrixV > 0
+LEFT JOIN #LatestStock sd ON sd.Code = LTRIM(RTRIM(p.Code)) COLLATE DATABASE_DEFAULT
+LEFT JOIN #LatestVente vt ON vt.Code = LTRIM(RTRIM(p.Code)) COLLATE DATABASE_DEFAULT
+OUTER APPLY (
+  SELECT TOP 1 ls.PrixV FROM #LatestStock ls
+  WHERE ls.Code IN (
+    SELECT LTRIM(RTRIM(mb2.MultiCode)) COLLATE DATABASE_DEFAULT FROM dbo.MultiCodeBare mb2
+    WHERE LTRIM(RTRIM(mb2.Pere)) COLLATE DATABASE_DEFAULT = (
+      SELECT TOP 1 LTRIM(RTRIM(mb1.Pere)) COLLATE DATABASE_DEFAULT FROM dbo.MultiCodeBare mb1
+      WHERE LTRIM(RTRIM(mb1.MultiCode)) COLLATE DATABASE_DEFAULT = LTRIM(RTRIM(p.Code)) COLLATE DATABASE_DEFAULT
+    ) AND mb2.MultiCode IS NOT NULL AND mb2.MultiCode <> ''
+  ) ORDER BY ls.DateAch DESC
+) sib
+WHERE CASE
+    WHEN sd.DateAch IS NOT NULL AND vt.DateVente IS NOT NULL THEN CASE WHEN vt.DateVente >= sd.DateAch THEN vt.PrixV ELSE sd.PrixV END
+    WHEN sd.DateAch IS NOT NULL THEN sd.PrixV
+    WHEN vt.DateVente IS NOT NULL THEN vt.PrixV
+    ELSE sib.PrixV
+  END > 0;
+
+DROP TABLE #LatestStock; DROP TABLE #LatestVente;
 '@
 
 $PROMO_SQL = @'
