@@ -118,11 +118,23 @@ function Sync-Once {
 
   $products = New-Object System.Collections.Generic.List[object]
   foreach ($r in $prod.Rows) {
-    $products.Add([ordered]@{ Code = [string]$r.Code; Designation = [string]$r.Designation; PrixV = [double]$r.PrixV })
+    $code = [Convert]::ToString($r['Code']).Trim()
+    if (-not $code) { continue }
+    $products.Add([ordered]@{
+      Code        = $code
+      Designation = [Convert]::ToString($r['Designation']).Trim()
+      PrixV       = [Convert]::ToDouble($r['PrixV'])
+    })
   }
   $promos = New-Object System.Collections.Generic.List[object]
   foreach ($r in $promo.Rows) {
-    $promos.Add([ordered]@{ barcode = [string]$r.barcode; oldPrice = [double]$r.oldPrice; newPrice = [double]$r.newPrice })
+    $bc = [Convert]::ToString($r['barcode']).Trim()
+    if (-not $bc) { continue }
+    $promos.Add([ordered]@{
+      barcode  = $bc
+      oldPrice = [Convert]::ToDouble($r['oldPrice'])
+      newPrice = [Convert]::ToDouble($r['newPrice'])
+    })
   }
 
   if ($products.Count -eq 0) { Log "no products with a price found - nothing pushed (check the DB)." 'Yellow'; return }
@@ -133,12 +145,16 @@ function Sync-Once {
   Log ("OK - {0} products, {1} promos pushed" -f $resp.productCount, $resp.promoCount) 'Cyan'
 }
 
+function Report-Error($e) {
+  Log ("error [line {0}]: {1} :: {2}" -f $e.InvocationInfo.ScriptLineNumber, $e.InvocationInfo.Line.Trim(), $e.Exception.Message) 'Red'
+}
+
 if ($Once) {
-  Sync-Once
+  try { Sync-Once } catch { Report-Error $_; exit 1 }
 } else {
   Log "Siir sync running - every $IntervalSeconds s. Ctrl+C to stop." 'Yellow'
   while ($true) {
-    try { Sync-Once } catch { Log "error: $($_.Exception.Message)" 'Red' }
+    try { Sync-Once } catch { Report-Error $_ }
     Start-Sleep -Seconds $IntervalSeconds
   }
 }
